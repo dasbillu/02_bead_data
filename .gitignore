@@ -9,8 +9,7 @@
 ## all scripts but "for_submission"
 scripts/*
 !scripts/for_submission
-pippo/*
-!pippo/pluto
+
 # History files
 .Rhistory
 .Rapp.history
