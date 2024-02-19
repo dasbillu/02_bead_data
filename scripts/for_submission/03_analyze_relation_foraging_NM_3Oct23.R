@@ -427,27 +427,36 @@ library(GeneOverlap)
 
 colonies2 <- for.beads %>% pull(colonyID) %>% as.character() %>% unique()
 
-# create a set of fast and slow colonies as per initial classification
-set1 <- list("fast"=fast.cols, 
-             "slow"=slow.cols)
+# # create a set of fast and slow colonies as per initial classification
+# set1 <- list("fast"=fast.cols, 
+#              "slow"=slow.cols)
 
-## create a set of all colonies that are in the top right and bottom left corners of the graph, split by medians
-top_right <- colonies2[which(unlist(for.real.centroid)>=median.for & unlist(beads.real.centroid)>=median.beads)]
-top_left <- colonies2[which(unlist(for.real.centroid)<median.for & unlist(beads.real.centroid)>=median.beads)]
-bottom_right <- colonies2[which(unlist(for.real.centroid)>=median.for & unlist(beads.real.centroid)<median.beads)]
-bottom_left <- colonies2[which(unlist(for.real.centroid)<median.for & unlist(beads.real.centroid)<median.beads)]
+# colonies split by median proportion of beads removed
+set1 <- list(
+  "high_rubbish_removal" = colonies2[
+    which(unlist(beads.real.centroid) > median.beads)
+  ],
+  "low_rubbish_removal" = colonies2[
+    which(unlist(beads.real.centroid) < median.beads)
+  ]
+)
 
-set2 <- list("top_right"=top_right,
-             # "top_left"=top_left,
-             # "bottom_right"=bottom_right,
-             "bottom_left"=bottom_left)
+# colonies split by median foraging
+set2 <- list(
+  "high_foraging" = colonies2[
+    which(unlist(for.real.centroid) > median.for)
+  ],
+  "low_foraging" = colonies2[
+    which(unlist(for.real.centroid) < median.for)
+  ]
+)
 
-
-gom.obj <- newGOM(set1, set2,
+gom.obj <- newGOM(set1, 
+                  set2,
                   genome.size = length(colonies2))
 
 writeLines("The p-values for the Fisher's exact test:")
-getMatrix(gom.obj, name = "pval") %>% round(.,3)
+getMatrix(gom.obj, name = "pval") %>% round(.,4)
 writeLines("The odds-ratio:")
 getMatrix(gom.obj, name = "odds.ratio") %>% round(.,2)
 
