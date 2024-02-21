@@ -50,6 +50,16 @@ bd.saveplot <- function(plot,
 ## check pairwise dissimilarity using mean (median) and 95% CI
 source(paste0(path_to_repo,"/functions/check_pairwise_significance.R"))
 
+# Load colony registry ----------------------------------------------------
+
+## save the file for easy call
+colony.name.register <- readRDS(
+  paste0(
+    path_to_repo, 
+    "/results/raw_data/",
+    "colony_name_register.RDS"
+  )
+)
 
 # Set parameters ----------------------------------------------------------
 
@@ -253,18 +263,24 @@ summ_by_date <- for.2022 |>
 
 
 # Save foraging data ------------------------------------------------------
-
-# for.2022 |> 
-#   glimpse() |> 
-#   select(
-#     colonyID,
-#     date,
-#     foraging_30s
-#   ) |>
-#   write.csv(
-#     "./results/tables/supp_foraging_counts_2022.csv",
-#     row.names = F
-#   )
+for.2022 |>
+  glimpse() |>
+  select(
+    colonyID,
+    date,
+    foraging_30s
+  ) |>
+  left_join(
+    colony.name.register |> 
+      rename(colonyID_real = old_name, colonyID = new_name),
+    join_by(colonyID)
+  ) |> 
+  relocate(colonyID_real, .before = 1) |> 
+  write.csv(
+    "./manuscript/supp_files/raw_data/foraging_counts_2022.csv",
+    # "./results/tables/supp_foraging_counts_2022.csv",
+    row.names = F
+  )
 
 
 # Plot data ---------------------------------------------------------------
