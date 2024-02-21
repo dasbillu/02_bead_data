@@ -79,6 +79,18 @@ s.tidydat.mod <- readRDS(
   )
 )
 
+
+# Load colony registry ----------------------------------------------------
+
+## save the file for easy call
+colony.name.register <- readRDS(
+  paste0(
+    path_to_repo, 
+    "/results/raw_data/",
+    "colony_name_register.RDS"
+  )
+)
+
 ## Split data for Day 1 and 2
 dat.d1 <- s.tidydat.mod %>%
   filter(counted_when == "D1_bN") %>%
@@ -559,7 +571,6 @@ dat.d1 %>%
       name
     )
   ) |> 
-  
   mutate(
     # bead_for = ifelse(
     #   n_bead_reps >= 2 & n_for_reps >= 2, 
@@ -583,6 +594,13 @@ dat.d1 %>%
   arrange(which_yrs,
           desc(tmp)) %>%
   select(-tmp) |>
+  left_join(
+    colony.name.register |> 
+      rename(colonyID_real = old_name, colonyID = new_name),
+    join_by(colonyID)
+  ) |> 
+  relocate(colonyID_real, .before = 1) |> 
+  glimpse() |> 
   # save file
   write.csv(
     paste0(

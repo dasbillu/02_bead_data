@@ -41,6 +41,17 @@ bd.saveplot <- function(plot,name="myplot",width,height) {
 source(paste0(path_to_repo,"/functions/check_pairwise_significance.R"))
 
 
+# Load colony registry ----------------------------------------------------
+
+## save the file for easy call
+colony.name.register <- readRDS(
+  paste0(
+    path_to_repo, 
+    "/results/raw_data/",
+    "colony_name_register.RDS"
+  )
+)
+
 # Set parameters ----------------------------------------------------------
 
 ## minimum number of beads (out of 50) that
@@ -875,7 +886,8 @@ s.tidydat.mod |>
     paste0(
       path_to_repo,
       "/manuscript/supp_files/raw_data/",
-      "raw_data_bead_returns_foraging_rate_2021_2022.csv"
+      # "raw_data_bead_returns_foraging_rate_2021_2022.csv"
+      "bead_experiment_data_2021_2022.csv"
     ),
     row.names = F
   )
