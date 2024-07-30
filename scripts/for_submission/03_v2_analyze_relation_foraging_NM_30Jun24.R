@@ -373,7 +373,20 @@ glmm <- mm3
 
 ## QC model ----
 plot(glmm)
-summary(glmm)
+
+## Export summary table ----
+summary(glmm) |> 
+  purrr::pluck(coefficients) |> 
+  as.data.frame() |> 
+  tibble::rownames_to_column(
+    var = "Variable"
+  ) |> 
+  as_tibble() |> 
+  janitor::clean_names() |> 
+  write.csv(
+    "./results/tables/02_resubmission_model_summary.csv",
+    row.names = FALSE
+  )
 
 ## plot predictions ----
 ### bead returns ~ prop foraging ----
