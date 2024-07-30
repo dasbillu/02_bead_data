@@ -130,124 +130,124 @@ if (which.yr=="2021") {
 
 
 
-# Simulate trash accumulation ---------------------------------------------
-
-prop.trash <- c(0.08)             ## 8% of all incoming items are trash
-duration.foraging <- c(3)         ## duration of foraging = 3 hours
-
-## incoming rate = 1/2 of total (in+out) foraging rate
-rates.incoming <- for.data/2
-
-# ## incoming foraging rate - quantiles
-rates.incoming <- c(min(rates.incoming), 
-                    quantile(rates.incoming, 
-                             probs = c(0.1,0.3,0.5,0.7,0.9)), 
-                    max(rates.incoming))
-
-n.rows <- length(duration.foraging)
-n.cols <- length(rates.incoming)
-
-list.prop.trash <- list()
-
-for (k in 1:length(prop.trash)) {
-  
-  items <- matrix(data = NA, n.rows, n.cols)
-  trash <- matrix(data = NA, n.rows, n.cols)
-  beads <- matrix(data = NA, n.rows, n.cols)
-  
-  for (i in 1:length(duration.foraging)) {
-    # set duration in hours
-    d <- duration.foraging[[i]]
-    
-    for (j in 1:length(rates.incoming)) {
-      # set rate of incoming ants (#ants/30seconds) = (in+out)/2
-      r <- rates.incoming[[j]]
-      
-      # number of items brought in
-      items[i,j] <- r*2*60*d
-      
-      # number of trash
-      trash[i,j] <- prop.trash[[k]]*items[i,j]
-      
-      # percent of trash that is beads
-      beads[i,j] <- (50/trash[i,j])*100
-    }
-  }
-  rownames(items) <- paste0(duration.foraging,"-hours")
-  colnames(items) <- paste0(rates.incoming,"-ants/30s")
-  rownames(trash) <- paste0(duration.foraging,"-hours")
-  colnames(trash) <- paste0(rates.incoming,"-ants/30s")
-  rownames(beads) <- paste0(duration.foraging,"-hours")
-  colnames(beads) <- paste0(rates.incoming,"-ants/30s")
-  
-  ## save the matrices into the list
-  list.prop.trash[[k]] <- list(items,trash,beads)
-  names(list.prop.trash[[k]])[1] <- paste0("percent_trash_",prop.trash[[k]],"_n_forageditems")
-  names(list.prop.trash[[k]])[2] <- paste0("percent_trash_",prop.trash[[k]],"_n_trash")
-  names(list.prop.trash[[k]])[3] <- paste0("percent_trash_",prop.trash[[k]],"_percent_beads")
-  names(list.prop.trash)[k] <- paste0("percent_trash_",prop.trash[[k]])
-}
-
-# Let's check the output
-# names(list.prop.trash)
-
-writeLines("Scenario: when 8% of all foraged items are trash")
-writeLines("Numbers = % trash accumulated that is beads")
-list.prop.trash[[1]][[3]] %>% round(.,1) %>% t()
-
-
-# Table simulation results ------------------------------------------------
-
-rates.incoming <- rates.incoming %>% as.numeric() %>% round(.,2)
-foraged.items <- list.prop.trash[[1]] %>% pluck(1) %>% as.numeric() %>% round(.,0)
-n.trash <- list.prop.trash[[1]] %>% pluck(2) %>% as.numeric() %>% round(.,0)
-percent.beads <- list.prop.trash[[1]] %>% pluck(3) %>% as.numeric() %>% round(.,2)
-
-data.frame(
-  breaks_in_2022 = c(
-    "minimum",
-    "10th percentile",
-    "30th percentile",
-    "median",
-    "70th percentile",
-    "90th percentile",
-    "maximum"
-  ),
-  avg_foraging_rate = rates.incoming,
-  n_foraged_items = foraged.items,
-  n_foraged_trash_items = n.trash,
-  n_beads_provided = 50,
-  percent_trash_beads = percent.beads
-) #%>%
-#   write.csv(.,
-#             paste0(
-#               path_to_repo,
-#               "/results/tables/",
-#               "02_table_foraging_trash_proportions.csv"
-#             ),
-#             row.names = F
-#             )
-
-
-# Plot the simulation -----------------------------------------------------
-
-min.abline <- round(min(list.prop.trash[[1]][[3]]),0)
-max.abline <- round(max(list.prop.trash[[1]][[3]]),0)
-mid.abline <- round(median(list.prop.trash[[1]][[3]]),0)
-par(mfrow=c(1,1), mar=c(5,5,5,5))
-plot(x=rates.incoming, y=list.prop.trash[[1]][[3]], 
-     type = "b", 
-     ylab = "% of trash that are beads",
-     xlab = "avg. foraging rate (ants/30s)",
-     main = paste0("foraged items are trash = 8%\nduration of foraging = 3h"),
-     # xlim = c(0,50), 
-     # ylim = c(0,23),
-     # xaxt='n', yaxt='n',
-     pch=21, col="black", bg="orange", cex=2,
-     cex.lab=1.5, cex.main=1.5)
-# axis(side = 1, at = c(0,10,20,30,40,50), cex.axis=1.5)
-# axis(side = 2, at = c(0,min.abline,mid.abline,max.abline), cex.axis=1.5)
-abline(h=c(mid.abline), col="grey60", lty="dashed", lwd=1.5)
+# # Simulate trash accumulation ---------------------------------------------
+# 
+# prop.trash <- c(0.08)             ## 8% of all incoming items are trash
+# duration.foraging <- c(3)         ## duration of foraging = 3 hours
+# 
+# ## incoming rate = 1/2 of total (in+out) foraging rate
+# rates.incoming <- for.data/2
+# 
+# # ## incoming foraging rate - quantiles
+# rates.incoming <- c(min(rates.incoming), 
+#                     quantile(rates.incoming, 
+#                              probs = c(0.1,0.3,0.5,0.7,0.9)), 
+#                     max(rates.incoming))
+# 
+# n.rows <- length(duration.foraging)
+# n.cols <- length(rates.incoming)
+# 
+# list.prop.trash <- list()
+# 
+# for (k in 1:length(prop.trash)) {
+#   
+#   items <- matrix(data = NA, n.rows, n.cols)
+#   trash <- matrix(data = NA, n.rows, n.cols)
+#   beads <- matrix(data = NA, n.rows, n.cols)
+#   
+#   for (i in 1:length(duration.foraging)) {
+#     # set duration in hours
+#     d <- duration.foraging[[i]]
+#     
+#     for (j in 1:length(rates.incoming)) {
+#       # set rate of incoming ants (#ants/30seconds) = (in+out)/2
+#       r <- rates.incoming[[j]]
+#       
+#       # number of items brought in
+#       items[i,j] <- r*2*60*d
+#       
+#       # number of trash
+#       trash[i,j] <- prop.trash[[k]]*items[i,j]
+#       
+#       # percent of trash that is beads
+#       beads[i,j] <- (50/trash[i,j])*100
+#     }
+#   }
+#   rownames(items) <- paste0(duration.foraging,"-hours")
+#   colnames(items) <- paste0(rates.incoming,"-ants/30s")
+#   rownames(trash) <- paste0(duration.foraging,"-hours")
+#   colnames(trash) <- paste0(rates.incoming,"-ants/30s")
+#   rownames(beads) <- paste0(duration.foraging,"-hours")
+#   colnames(beads) <- paste0(rates.incoming,"-ants/30s")
+#   
+#   ## save the matrices into the list
+#   list.prop.trash[[k]] <- list(items,trash,beads)
+#   names(list.prop.trash[[k]])[1] <- paste0("percent_trash_",prop.trash[[k]],"_n_forageditems")
+#   names(list.prop.trash[[k]])[2] <- paste0("percent_trash_",prop.trash[[k]],"_n_trash")
+#   names(list.prop.trash[[k]])[3] <- paste0("percent_trash_",prop.trash[[k]],"_percent_beads")
+#   names(list.prop.trash)[k] <- paste0("percent_trash_",prop.trash[[k]])
+# }
+# 
+# # Let's check the output
+# # names(list.prop.trash)
+# 
+# writeLines("Scenario: when 8% of all foraged items are trash")
+# writeLines("Numbers = % trash accumulated that is beads")
+# list.prop.trash[[1]][[3]] %>% round(.,1) %>% t()
+# 
+# 
+# # Table simulation results ------------------------------------------------
+# 
+# rates.incoming <- rates.incoming %>% as.numeric() %>% round(.,2)
+# foraged.items <- list.prop.trash[[1]] %>% pluck(1) %>% as.numeric() %>% round(.,0)
+# n.trash <- list.prop.trash[[1]] %>% pluck(2) %>% as.numeric() %>% round(.,0)
+# percent.beads <- list.prop.trash[[1]] %>% pluck(3) %>% as.numeric() %>% round(.,2)
+# 
+# data.frame(
+#   breaks_in_2022 = c(
+#     "minimum",
+#     "10th percentile",
+#     "30th percentile",
+#     "median",
+#     "70th percentile",
+#     "90th percentile",
+#     "maximum"
+#   ),
+#   avg_foraging_rate = rates.incoming,
+#   n_foraged_items = foraged.items,
+#   n_foraged_trash_items = n.trash,
+#   n_beads_provided = 50,
+#   percent_trash_beads = percent.beads
+# ) #%>%
+# #   write.csv(.,
+# #             paste0(
+# #               path_to_repo,
+# #               "/results/tables/",
+# #               "02_table_foraging_trash_proportions.csv"
+# #             ),
+# #             row.names = F
+# #             )
+# 
+# 
+# # Plot the simulation -----------------------------------------------------
+# 
+# min.abline <- round(min(list.prop.trash[[1]][[3]]),0)
+# max.abline <- round(max(list.prop.trash[[1]][[3]]),0)
+# mid.abline <- round(median(list.prop.trash[[1]][[3]]),0)
+# par(mfrow=c(1,1), mar=c(5,5,5,5))
+# plot(x=rates.incoming, y=list.prop.trash[[1]][[3]], 
+#      type = "b", 
+#      ylab = "% of trash that are beads",
+#      xlab = "avg. foraging rate (ants/30s)",
+#      main = paste0("foraged items are trash = 8%\nduration of foraging = 3h"),
+#      # xlim = c(0,50), 
+#      # ylim = c(0,23),
+#      # xaxt='n', yaxt='n',
+#      pch=21, col="black", bg="orange", cex=2,
+#      cex.lab=1.5, cex.main=1.5)
+# # axis(side = 1, at = c(0,10,20,30,40,50), cex.axis=1.5)
+# # axis(side = 2, at = c(0,min.abline,mid.abline,max.abline), cex.axis=1.5)
+# abline(h=c(mid.abline), col="grey60", lty="dashed", lwd=1.5)
 
 
 
