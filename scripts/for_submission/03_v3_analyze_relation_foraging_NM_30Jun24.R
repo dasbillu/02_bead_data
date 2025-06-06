@@ -293,15 +293,30 @@ mm_null <- lme4::glmer(
   family = binomial(link = "logit")
 )
 
+# # ColonyID as a random effect (INDIVIDUAL)
+# 
+# mm0 <- update(
+#   mm_null,
+#   . ~ . +
+#     (1|colonyID)
+# )
+# anova(
+#   mm_null,
+#   mm0
+# )
+
+# ColonyID as a random effect (NESTED)
+
 mm0 <- update(
   mm_null,
   . ~ . +
-    (1|colonyID)
+    (1|colonyID/rep)
 )
 anova(
   mm_null,
   mm0
 )
+
 
 ## Age class ----
 # Can't talk about it since all 2021 colonies are from only
@@ -322,18 +337,21 @@ mm0b <- update(
     prop_foraging
 )
 anova(mm0b, mm0)
-
+# (individual): 4.8365  1    0.02786 *
+# (nested):     
 
 ## Interaction: yr, prop foraging ----
 mm1 <- update(
   mm0b,
   . ~ . + 
-    yr: prop_foraging
+    yr:prop_foraging
 )
 anova(
   mm1,
   mm0b
 )
+# individual: 7.7304  1    0.00543 **
+# nested:     
 
 ## yr ----
 mm2 <- update(
@@ -343,7 +361,9 @@ mm2 <- update(
 anova(
   mm1, mm2
 )
-# the odds of bead returns changes year to year (chisq = 16, df = 1, p < 0.001)
+# individual: 12.199  1  0.0004782 ***
+# nested:     
+
 
 ## Colony effects
 
