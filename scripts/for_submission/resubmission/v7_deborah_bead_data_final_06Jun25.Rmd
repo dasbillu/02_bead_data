@@ -1,0 +1,2146 @@
+---
+title: "Deborah_bead_data"
+author: "Biplabendu Das"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  html_document:
+    code_folding: hide
+    keep_md: no
+    theme: united
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+editor_options:
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = F)
+knitr::opts_chunk$set(message = F)
+
+## For more inspiration on customizing the html output, refer to the following:
+# https://bookdown.org/yihui/rmarkdown/html-document.html#table-of-contents
+
+set.seed(420)
+rm(list = ls())
+
+```
+
+
+```{r housekeeping, include=FALSE}
+## Load the libraries
+pacman::p_load(tidyverse, viridis, conflicted)
+pacman::p_load(ggplot2, patchwork)
+# pacman::p_load(RSQLite, dbplyr)
+
+## set conflict preference
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("lmer", "lme4")
+conflict_prefer("intersect", "dplyr")
+
+## set path to your working directory
+# path_to_repo = "/Users/biplabendudas/Documents/05_postdoc/Deborah_Gordon/04_research/2022/02_bead_data"
+path_to_repo = "/Users/bidas/Documents/05_postdoc/Deborah_Gordon/04_research/2022/02_bead_data"
+path_to_figures = paste0(path_to_repo,"/results/figures/")
+
+## load functions
+# customized theme for publication quality figures
+source(paste0(path_to_repo,"/functions/theme_publication.R"))
+# # function to perform enrichment analysis
+# source(paste0(path_to_repo,"/functions/enrichment_analysis.R"))
+# # # function to plot z-scores (Cflo genes only)
+# source(paste0(path_to_repo,"/functions/plot_zscores.R"))
+
+bd.saveplot <- function(plot,name="myplot",width,height) {
+  savingto <- paste0(path_to_figures,name,".png")
+  writeLines(paste0("Plot is being saved to \n",savingto))
+  png(savingto, 
+    width = width, height = height, units = "cm", res = 300)
+  print(plot)
+  trash <- dev.off()
+}
+
+## checking pairwise dissimilarity using mean (median) and 95% CI
+source(paste0(path_to_repo,"/functions/check_pairwise_significance.R"))
+```
+
+
+```{r set_parameters}
+# minimum number of beads (out of 50) the colony must collect to be part of the analyses
+atleast.beads <- 40
+
+# color schemes
+## year of obs
+yr_colors <-c("grey60","grey60")
+## age classes
+age_colors <- c("#8D72A1", "#F26C7F", "#FBAD73")
+## bead classes
+# bead_colors <- c(slow="#1A80D9", fast="#F23030") # slow=blue, fast=red
+bead_colors <- c(slow="#FBB369", fast="#3868A4")
+## foraging classes
+foraging_colors <- c("#9CD5A2", "#F29544")
+```
+
+# Overview/Goals
+
+Deborah: 
+
+This data set comes from an experiment with harvester ants last summer. Harvester ant foragers bring in lots of seeds and parts of plants, some of which are rejected by ants inside the nest, and then the refuse is carried out and put on the nest mound midden. 
+
+> Here we presented small plastic beads coated in oil which the ants brought into the nest, and were later rejected and put back out on the midden.
+
+
+
+# BEAD DATA
+
+## Bead data 2021
+
+### Part 1: INSPECT DATA
+
+Two data sheets are available in the Excel workbook. For convenience of analysis, the excel sheets are saved individually as csv files and, if necessary, the column names for each were modified.
+
+Sheet 1: foraging_data.csv
+- contains three columns: date, colonyID, foraging_30s
+
+Sheet 2: beads_out.csv
+- contains XXX cols: num_out, date, colonyID, time_put_out, n_collected, n_returned_DayX (X %in% 1:6)
+
+Brief description of the columns:
+- date = date of observation
+- colonyID = unique colony identifier
+- time_put_out = time-of-day at which beads were put out
+- n_collected = number of beads that had been brought into the nest at the end of foraging on Day 1
+- n_returned_DayX = number of beads that had been brought *out of the nest* by the end of **Day X**
+
+Note; 
+NA means the colony is not active that day
+NM means that the colony was doing nest maintenance, when they carry out refuse including beads
+
+Some additional info:
+
+Beads coated with oil were put out in 6 colonies on day 1, color green, then another 6 colonies on day 2, color green, then again with first 6 on day 3 color pink, then again with 2nd 6 on day 4 color pink, back to green days 5 and 6
+
+Numbers of beads brought out are listed separately by color. E.g., colony 1131 took out 18 green beads on day 2 of green 8-24, and 3 pink beads on day 2 of pink 8-26.
+
+For the 3rd round, for whatever number of green beads from the first round were not out by 8-27 or 8-28, then we don't know which day those were from.
+
+### Part 2: Load data
+
+```{r load_data}
+# read foraging_data.csv
+for.dat <- read.csv(
+  paste0(path_to_repo,"/data/foraging_data.csv")
+) %>% as_tibble() |> glimpse()
+
+# read bead data
+bead.dat <- read.csv(
+  paste0(
+    path_to_repo, 
+    "/data/beads_out_new_24Jan25.csv"
+  )
+) %>% as_tibble() |> glimpse()
+
+# read colony-age data
+colony.dat <- read.csv(
+# read.csv(
+  paste0(
+    path_to_repo, 
+    "/data/foraging_counts_08_13_22.csv"
+  )
+) %>% 
+  as_tibble() %>% 
+  select(
+    colonyID = colony_ID, 
+    everything()
+  ) %>% 
+  mutate(
+    colonyID = factor(colonyID),
+    age_class = case_when(
+      age_2022 <= 2 ~ "1-2_yr_old",
+      age_2022 <= 4 ~ "3-4_yr_old",
+      .default = "older_than_5_yr"
+    ) |> 
+      factor(
+        levels = c(
+          "1-2_yr_old", 
+          "3-4_yr_old", 
+          "older_than_5_yr"
+        )
+      )
+  ) |> glimpse()
+```
+
+
+### Part 3: Summarize the data
+
+```{r summarize_data, echo=F}
+
+writeLines("What are the names of the colonies? \nShown as: colonyID")
+bead.dat %>% 
+  select(colonyID) %>%
+  distinct() %>% 
+  mutate(colonyID=as.factor(colonyID)) %>% 
+  left_join(colony.dat, by="colonyID") %>%
+  arrange(age_2022) %>% 
+  head(4)
+
+
+# Specify the dates for green/pink beads
+green.days <- c(
+  "8/23/21",
+  "8/24/21",
+  "8/27/21",
+  "8/28/21"
+) %>% 
+  as.Date(format = "%m/%d/%y")
+pink.days <- c(
+  "8/25/21",
+  "8/26/21"
+) %>% 
+  as.Date(format = "%m/%d/%y")
+```
+
+### Part 4: Clean Data
+
+```{r clean_1}
+df <-
+  bead.dat %>%
+  # arrange by colony IDs
+  arrange(colonyID) %>% 
+  ## FORMAT:
+  mutate(
+    date = as.Date(date, format = "%m/%d/%y"),
+    colonyID = factor(colonyID),
+    # define colony sets 
+    colonyGroup = case_when(
+      date %in% c(green.days[c(1,3)], pink.days[1]) ~ "batch_A",
+      date %in% c(green.days[c(2,4)], pink.days[2]) ~ "batch_B",
+      .default = NA
+    ) |> 
+      factor(
+        levels = c("batch_A", "batch_B")
+      ),
+    # define replicates per colony set
+    bead_color = case_when(
+      date %in% green.days[1] ~ "rep1-green-21",
+      date %in% green.days[2] ~ "rep2-green-21",
+      date %in% pink.days[1]  ~ "rep3-pink-21",
+      date %in% pink.days[2]  ~ "rep4-pink-21",
+      date %in% green.days[3] ~ "rep5-green-21",
+      date %in% green.days[4] ~ "rep6-green-21",
+      .default = NA
+    ) |> 
+      as.factor()
+  ) %>%
+  ## SUBSET:
+  # Keep data for first THREE days of observations
+  select(
+    num_out:n_returned_Day3, 
+    bead_color, 
+    colonyGroup
+  ) %>%
+  ## CLEAN:
+  # format columns appropriately
+  mutate(
+    n_collected = readr::parse_number(n_collected),
+    across(
+      matches("^n_returned_Day"),
+      ~ as.numeric(.x)
+    )
+  ) %>% 
+  # keep colonies for which we have 
+  filter(
+    # data for at least one day
+    if_any(
+      matches("^n_returned_Day"),
+      ~ !is.na(.x)
+    ),
+    # at least X number of collected beads 
+    n_collected >= atleast.beads
+  )
+
+  
+# query 1
+# summarize the data
+df %>% mutate_all(as.factor) |> summary() ## THERE is no NAs in the data
+
+# query 1 (manuscript)
+# summarize by colony set and bead_color
+df %>% 
+  group_by(colonyGroup, bead_color, date) %>%
+  reframe(
+    n_colonies = n()
+  )
+
+```
+
+### Format 2021 data - I
+
+```{r prep_data}
+tidydat.2021 <-
+  df %>% 
+  rowwise() |> 
+  # Cumulative prop 
+  # create the cumulative sums
+  mutate(
+    cum_prop_day1 = n_returned_Day1/n_collected,
+    cum_prop_day2 = sum(
+      n_returned_Day1, 
+      n_returned_Day2,
+      na.rm = TRUE
+    )/n_collected,
+    cum_prop_day3 = sum(
+      n_returned_Day1, 
+      n_returned_Day2,
+      n_returned_Day3,
+      na.rm = TRUE
+    )/n_collected
+  ) %>% 
+  ungroup() |> 
+  tidyr::pivot_longer(
+    cols = starts_with("cum_prop"),
+    names_to = "day_of_obs",
+    values_to = "cum_prop"
+  ) %>% 
+  mutate(
+    day_of_obs  = readr::parse_number(day_of_obs),
+    date        = date + day_of_obs - 1
+  ) %>% 
+  select(
+    num_out, 
+    date, 
+    colonyID,
+    n_collected, 
+    bead_color, 
+    colonyGroup,
+    day_of_obs, 
+    cum_prop
+  )
+
+```
+
+
+___
+
+### Format 2021 data - II
+
+```{r abc}
+old.summ <-
+  tidydat.2021 %>% 
+  left_join(
+    colony.dat, 
+    join_by(colonyID)
+  ) %>% 
+  mutate(
+    age_obs = age_2022 - 1,
+    day_of_obs = paste0(
+      "D", day_of_obs, "_bN"
+    ) |> 
+      factor(
+        levels = c("D1_bN", "D2_bN", "D3_bN")
+      )
+  ) %>% 
+  ## change column names to make them compatible to the 2022 dataset
+  select(
+    colonyID, 
+    date,
+    bead_color,
+    colonyGroup,
+    age_obs, 
+    age_class, 
+    beads_collected = n_collected,
+    counted_when = day_of_obs,
+    cum_prop
+  )
+
+```
+
+___
+
+
+## Bead data 2022
+
+
+```{r data_2022}
+filename <- paste0(
+  path_to_repo,
+  "/data/bead_data_2022/all_bead_data_2022/2022_bead_data_master_replicate_one_two_three_29Aug22.csv")
+
+## Read data
+dat.2022 <- read.csv(filename,
+                     header = T, stringsAsFactors = F,
+                     na.strings = c(""," ","did_not_count","NA",
+                                    "did_not_check",
+                                    "it_rained_could_not_check")) %>% 
+  as_tibble() %>% 
+  
+  # select the relevant columns
+  select(date, colonyID, age_class, age_2022, 
+         bead_color, beads_put_out, beads_collected,
+         beads_returned_Day1_beforenoon,
+         beads_returned_Day1_afternoon,
+         beads_returned_Day2_morning,
+         beads_returned_Day2_beforenoon,
+         beads_returned_Day2_afternoon,
+         beads_returned_Day3_beforenoon,
+         beads_returned_Day4_morning,
+         beads_returned_Day4_beforenoon) %>% 
+  
+  # calculate the cumulative proportion of beads returned
+  group_by(date, bead_color) %>% 
+  
+  # filter out the colonies for which we still need to check the data
+  filter(!(colonyID=="1560" & bead_color=="green")) %>% 
+  filter(!(colonyID=="1288" & bead_color=="green")) %>%
+  filter(!(colonyID=="1546" & bead_color=="green")) %>%
+  
+  # convert all the bead count columns as numeric
+  mutate_at(vars(matches("beads_")), as.numeric) %>% 
+  ungroup()
+```
+
+
+```{r prep_data_for_plot}
+## Create a tidy dataset and calculate the cumulative proportion of beads returned by colonies
+tidydat.2022a <-
+  dat.2022 %>% 
+  
+  # replace all the NAs with 0 to be able to calculate proportions
+  mutate_at(vars(matches("beads_")), function(x) ifelse(is.na(x), 0, x)) %>%
+  
+  # day 1 - before noon
+  mutate(cum_prop_returned_D1_beforenoon = round(beads_returned_Day1_beforenoon/beads_collected, 2)) %>% 
+  mutate(cum_prop_returned_D1_afternoon = round(cum_prop_returned_D1_beforenoon+beads_returned_Day1_afternoon/beads_collected, 2)) %>% 
+  mutate(cum_prop_returned_D2_morning = round(cum_prop_returned_D1_afternoon+beads_returned_Day2_morning/beads_collected, 2)) %>% 
+  mutate(cum_prop_returned_D2_beforenoon = round(cum_prop_returned_D2_morning+beads_returned_Day2_beforenoon/beads_collected,2)) %>%
+  mutate(cum_prop_returned_D2_afternoon = round(cum_prop_returned_D2_beforenoon+beads_returned_Day2_afternoon/beads_collected,2)) %>% 
+  mutate(cum_prop_returned_D3_beforenoon = round(cum_prop_returned_D2_beforenoon+beads_returned_Day3_beforenoon/beads_collected,2)) %>% 
+  mutate(cum_prop_returned_D4_morning = round(cum_prop_returned_D3_beforenoon+beads_returned_Day4_morning/beads_collected,2)) %>% 
+  mutate(cum_prop_returned_D4_beforenoon = round(cum_prop_returned_D4_morning+beads_returned_Day4_beforenoon/beads_collected,2)) %>% 
+  
+  arrange(age_2022) %>% 
+  
+  select(colonyID,
+         age_2022, age_class,
+         bead_color,
+         cum_prop_returned_D1_beforenoon:cum_prop_returned_D4_beforenoon,
+         everything())
+
+
+tidydat.2022b <- 
+  tidydat.2022a %>% 
+  
+  ## keep only colonies that collected at least 40 (of 50) beads offered
+  filter(beads_collected >= atleast.beads) %>% 
+  
+  pivot_longer(cols = starts_with("cum_prop"),
+               names_to = "counted_when",
+               values_to = "cum_prop") %>% 
+  
+  ## format the ordinal columns correctly
+  mutate(counted_when = ifelse(counted_when == "cum_prop_returned_D1_beforenoon", "D1_bN",
+                            ifelse(counted_when == "cum_prop_returned_D1_afternoon", "D1_aN",
+                                   ifelse(counted_when == "cum_prop_returned_D2_morning", "D2_M",
+                                          ifelse(counted_when == "cum_prop_returned_D2_beforenoon", "D2_bN",
+                                            ifelse(counted_when == "cum_prop_returned_D2_afternoon", "D2_aN",
+                                            ifelse(counted_when == "cum_prop_returned_D3_beforenoon", "D3_bN",
+                                            ifelse(counted_when == "cum_prop_returned_D4_morning", "D4_M",
+                                                 "D4_bN")))))))) %>%
+  mutate(counted_when = factor(counted_when, 
+                               levels = c("D1_bN", "D1_aN", 
+                                          "D2_M", "D2_bN", "D2_aN",
+                                          "D3_bN",
+                                          "D4_M", "D4_bN"))) %>% 
+  mutate(bead_color = ifelse(bead_color %in% c("light_blue", "dark_blue"), "blue", bead_color))  %>% 
+  mutate(colonyID = factor(colonyID), bead_color=factor(bead_color)) %>% 
+  mutate(date = as.Date(date, format="%m/%d/%y")) %>% 
+  
+  mutate(age_obs = age_2022) %>% 
+  
+  # ## remove the timepoints that we do not have data for  
+  # pink beads (round one)
+  filter(!(bead_color=="pink" & counted_when == "D1_aN")) %>%
+  filter(!(bead_color=="pink" & counted_when == "D2_aN")) %>%
+  filter(!(bead_color=="pink" & counted_when == "D4_M")) %>%
+  filter(!(bead_color=="pink" & counted_when == "D4_bN")) %>%
+  # green beads (round two)
+  filter(!(bead_color=="green" & counted_when == "D2_aN")) %>%
+  filter(!(bead_color=="green" & counted_when == "D3_bN")) %>%
+  filter(!(bead_color=="green" & counted_when == "D4_M")) %>%
+  # blue beads (round three)
+  filter(!(bead_color=="blue" & counted_when == "D1_aN")) %>%
+  filter(!(bead_color=="blue" & counted_when == "D2_bN")) %>%
+  filter(!(bead_color=="blue" & counted_when == "D4_bN")) %>% 
+  
+  ## select columns to make them compatible with 2021 dataset
+  select(colonyID, date,
+         bead_color,
+         age_2022, age_obs, age_class, 
+         beads_collected, counted_when, cum_prop)
+  
+# Summarize the data
+tidydat.2022b %>% summary()
+
+# There are NAs in the bead_color column, check
+tidydat.2022b %>% filter(is.na(bead_color))
+# It appears that for colony 1504 and 1506, we do not have bead color infor for one of the replicates.
+# Let's check to see if the other two color are already in the dataset, then by elimination the third and remaining color
+# would be the correct entry.
+tidydat.2022b %>% 
+  filter(
+    colonyID %in% c("1504","1506") & 
+      counted_when %in% c("D1_bN","D2_M")
+  ) %>% arrange(colonyID)
+# Yes it is blue. Add the information
+#
+## CORRECTION HAPPENED HERE
+#
+tidydat.2022b[is.na(tidydat.2022b$bead_color),]$bead_color <- "blue"
+```
+
+### Create rep IDs
+
+```{r}
+# Rename the bead color values to reflect replicate
+tidydat.2022 <- 
+  tidydat.2022b %>% 
+  mutate(
+    bead_color = recode_factor(
+      bead_color, 
+      pink = "rep7-pink", 
+      green = "rep8-green", 
+      blue = "rep9-blue"
+    ),
+    colonyGroup = "batch_C"
+  )
+## Re-summarize the data
+tidydat.2022 %>% summary()
+```
+
+
+### Filter 2022 dataset (Day 1-3)
+
+This subsetted dataset contains data collected on Days 1-3, irrespective of
+the time of day of collection:
+
+M = early morning   ~ 0800 hrs
+bN = before noon    ~ 1100 hrs
+aN = after noon     ~ 1400 hrs 
+
+```{r}
+## Obtain data for Day 1-3
+tidydat.2022.sub <-
+  tidydat.2022 %>% 
+    separate(
+      counted_when, 
+      c("day","counted_when"), 
+      sep="_"
+    ) %>% 
+    filter(
+      day %in% c("D1", "D2", "D3") #& 
+        # counted_when %in% c("bN", "M")
+    ) |> 
+    group_by(colonyID, bead_color, day) %>% 
+    reframe(
+      cum_prop2=max(cum_prop),
+      counted_when = paste(counted_when, collapse = ", "),
+      n_counts = n()
+    ) %>% 
+    # mutate_all(as.factor) |> summary()
+    mutate(
+      counted_when = if_else(
+        n_counts == 1,
+        counted_when,
+        case_when(
+          stringr::str_detect(counted_when, "bN") ~ "bN",
+          stringr::str_detect(counted_when, "aN") ~ "aN",
+          .default = counted_when
+        )
+      )
+    ) %>% 
+    # janitor::tabyl(
+    #   counted_when,
+    #   counted_when2,
+    #   day
+    # )
+    mutate(counted_when = paste0(day, "_", counted_when)) %>% 
+    select(-day,-n_counts) %>%
+    left_join(
+      tidydat.2022, 
+      by = c("colonyID","bead_color","counted_when")
+    ) %>% 
+    select(
+      colonyID, 
+      date, 
+      bead_color,
+      colonyGroup,
+      age_obs, 
+      age_class, 
+      beads_collected, 
+      counted_when, 
+      cum_prop
+    )
+
+```
+
+
+## Combine the 2021 and 2022 datasets
+
+> Current dataset contains: All colonies from 2021 and 2022, for which we have counts of the number of beads returned by the colony on Day 1 and 2.
+
+Note, for some colonies, day 2 data was observed in the morning (counted_when = D2_M) instead of later in the day (D2_bN).
+
+```{r combine_datasets}
+## Combine the two data sets
+# 
+tidydat.1 <-
+  rbind(old.summ, tidydat.2022.sub) %>% 
+  separate(
+    counted_when, 
+    c("day","counted_when"), 
+    sep = "_"
+  ) %>% 
+  # glimpse() |> view()
+  group_by(bead_color) %>% 
+  mutate(
+    rep = str_split(bead_color, "-")[[1]][1]
+  ) %>%  
+  ungroup()
+
+## CLEANING STEP HAPPENING HERE
+tidydat.1 %>%
+  # filter(cum_prop>1) %>% 
+  ## There are two values that are above 1, 
+  ## and a closer inspection of those trials (see below)
+  filter(
+    colonyID %in% c("1440","1533") & 
+      rep %in% c("rep8","rep9")
+  )
+  ## shows that in both cases, D1 value was very high and it is safe to assume a cum-prop of 1 on Day 2
+tidydat <- tidydat.1 %>% 
+  mutate(
+    cum_prop = if_else(
+      cum_prop > 1,
+      1,
+      cum_prop
+    )
+  )
+
+```
+
+## Export bead data for Days 1-3
+
+```{r}
+register <- readRDS(
+  here::here("./data/colony_name_register.RDS")
+) |> 
+  as_tibble()
+
+colonies_in_study <- read.csv(
+  here::here(
+    "./results/tables/01_table_colony_metadata.csv"
+  )
+) |> 
+  as_tibble()
+
+bead_data <- colonies_in_study |>
+# colonies_in_study |> 
+  select(
+    new_name = colonyID,
+    yr = which_yrs
+  ) |> 
+  separate_longer_delim(
+    yr,
+    delim = ", "
+  ) |> 
+  left_join(
+    register,
+    join_by(new_name)
+  ) |> 
+  rename(
+    colonyID = old_name
+  ) |> 
+  left_join(
+    tidydat |> 
+      mutate(
+        yr = lubridate::year(date) |> as.character()
+      ),
+    join_by(colonyID, yr)
+  ) |> 
+  mutate(
+    day_num = readr::parse_number(day)
+  ) |> 
+  group_by(
+    colonyID,
+    rep
+  ) |> 
+  mutate(
+    date = date[1] + day_num - 1,
+    cum_prop = if_else(
+      day_num > 1 & cum_prop < dplyr::lag(cum_prop),
+      dplyr::lag(cum_prop),
+      cum_prop
+    )
+  ) |> 
+  ungroup() |> 
+  select(
+    - day_num
+  )
+
+# Calculate proportion removed on each day of obs ----
+bead_data <- bead_data |> 
+  group_by(
+    colonyID,
+    rep
+  ) |> 
+  mutate(
+    prop = case_when(
+      day == "D1" ~ cum_prop,
+      day == "D2" ~ cum_prop - cum_prop[1],
+      day == "D3" ~ cum_prop - cum_prop[2],
+      .default = NA
+    ) |> 
+      round(2),
+    .before = cum_prop
+  ) |> 
+  ungroup()
+
+bead_data |> 
+  mutate_all(as.factor) |> 
+  summary()
+
+bead_data |> 
+  group_by(yr) |> 
+  reframe(
+    n_colonies = length(unique(colonyID))
+  )
+  
+```
+
+### Export 
+
+```{r}
+# bead_data |>
+#   rowwise() |> 
+#   mutate(
+#     bead_color = stringr::str_split(bead_color, "-")[[1]][2]
+#   ) |> 
+#   ungroup() |> 
+#   mutate(
+#     new_name = factor(
+#       new_name,
+#       levels = paste0(
+#         "C-",
+#         bead_data$new_name |> 
+#           unique() |> 
+#           stringr::str_replace("C-", "") |> 
+#           as.integer() |> 
+#           sort()
+#       )
+#     ),
+#     cum_prop = round(cum_prop, 3)
+#   ) |> 
+#   # glimpse()
+#   arrange(yr, new_name, rep) |> 
+#   # view()
+#   write.csv(
+#     "results/raw_data/bead_data_3days.csv",
+#     row.names = FALSE
+#   )
+```
+
+## Plot proportion of beads returned
+
+#### Plot 1: ( day of obs X year )
+
+```{r bead_figure, fig.width=8, fig.height=4}
+
+# bead_data |> 
+#   glimpse()
+dat_beads_p1 <- bead_data |>
+# bead_data |>
+  group_by(
+    yr,
+    day
+  ) |> 
+  reframe(
+    n = n(),
+    mean = mean(cum_prop, na.rm = TRUE),
+    se = sd(cum_prop, na.rm = TRUE) / sqrt(n()),
+    ci = 1.96 * ( sd(cum_prop, na.rm = TRUE) / sqrt(n()) )
+  ) |> 
+  # glimpse()
+  mutate(
+    yr  = factor(yr, levels = c("2021", "2022")),
+    day = factor(day, levels = paste0("D", 1:3)),
+    across(
+      is.numeric,
+      ~ round(.x, 3)
+    )
+  )
+
+dat_beads_p1 |> 
+  DT::datatable()
+  
+
+beads_p1 <- dat_beads_p1 |> 
+  ggplot(
+    aes(
+      x = day,
+      y = mean
+    )
+  ) +
+  geom_boxplot(
+    width = .7,
+    fatten = 1.75,
+    lwd = 0.75,
+    # alpha = 0.8,
+    fill = "grey70",
+    aes(
+      # fill = day,
+      x = day,
+      y = cum_prop
+    ),
+    data = bead_data
+  ) +
+  # geom_errorbar(
+  #   aes(
+  #     ymin = mean - ci,
+  #     ymax = mean + ci
+  #   ),
+  #   width = 0,
+  #   linewidth = 2
+  # ) +
+  # geom_point(
+  #   shape = 21,
+  #   aes(
+  #     fill = day
+  #   ),
+  #   size = 6
+  # ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    # breaks = c(0, 0.2, 0.5, 0.8, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    labels = c("0", "", "0.5", "", "1")
+    # labels = c("0", "0.5", "1")
+  ) +
+  labs(
+    y = "Proportion of beads \nremoved (cumulative)",
+    x = "Day"
+  ) +
+  facet_grid(~ yr) +
+  # facet_grid( yr ~ .) +
+  theme_Publication(25) +
+  theme(
+    legend.position = "none"
+  ) +
+  scale_color_manual(
+    values =  age_colors
+  ) +
+  scale_fill_manual(
+    values =  age_colors
+  )
+  
+```
+
+#### Plot 2: ( day of obs X rep X yr )
+
+```{r}
+
+summ <- bead_data |>
+# bead_data |>
+  group_by(
+    yr,
+    colonyGroup,
+    rep,
+    day,
+    date
+  ) |> 
+  reframe(
+    n = n(),
+    mean = mean(prop, na.rm = TRUE),
+    sd = sd(prop, na.rm = TRUE),
+    ci = 1.96 * ( sd(prop, na.rm = TRUE) / sqrt(n()) )
+  )
+
+# DO NOT OVERWRITE: ----
+# Will remove the trial column (which was manually input)
+# summ |> 
+#   write.csv(
+#     "results/raw_data/summ_bead_data_3days.csv",
+#     row.names = FALSE
+#   )
+#   
+
+summ_mod <- summ |>
+  as_tibble() |> 
+  mutate(
+    date = lubridate::as_date(date)
+  ) |> 
+  mutate(
+    across(
+      c(mean, ci, sd),
+      ~ round(.x, 3)
+    )
+  ) |> 
+  arrange(
+    yr,
+    rep,
+    date
+  ) |> 
+  left_join(
+    bead_data |> 
+      select(
+        yr,
+        colonyGroup,
+        rep,
+        bead_color
+      ) |> 
+      mutate(
+        bead_color = case_when(
+          stringr::str_detect(bead_color, "green") ~ "green",
+          stringr::str_detect(bead_color, "pink") ~ "pink",
+          stringr::str_detect(bead_color, "blue") ~ "blue",
+          .default = NA
+        ) |> 
+          factor(
+            levels = c("green", "pink", "blue")
+          )
+      ) |> 
+      distinct(),
+    join_by(yr, colonyGroup, rep)
+  ) |> 
+  group_by(
+    yr
+  ) |> 
+  mutate(
+    doe = (date - date[1] + 1) |> 
+      as.numeric("days"),
+    .after = date
+  ) |> 
+  ungroup()
+```
+
+## Summary Stats: Figure 1
+
+```{r}
+## [ View ] Fig 1: Supporting summary statistics ------
+summ_mod |> 
+  DT::datatable()
+
+# ## [ Export ] Fig 1: Supporting summary statistics ------
+# summ_mod |> 
+#   rename(
+#     day_of_experiment = doe,
+#     n_colonies = n,
+#     day_of_replicate = day,
+#     replicate = rep,
+#     year = yr
+#   ) |> 
+#   relocate(
+#     day_of_experiment,
+#     date,
+#     .before = colonyGroup
+#   ) |> 
+#   glimpse()
+  # write.csv(
+  #   here::here(
+  #     "./manuscript/resubmission/99_decision/supp_files/new_supp_summary_stats_table_for_figure1.csv"
+  #   ),
+  #   row.names = FALSE
+  # )
+
+```
+
+
+## Kruskal Wallis: Figure 1
+
+```{r}
+fig1_data <- bead_data |>
+  select(
+    yr,
+    colonyID,
+    colonyGroup,
+    rep,
+    day,
+    prop,
+    cum_prop
+  ) |> 
+  glimpse()
+
+kruskal.test(
+  prop ~ day, 
+  data = fig1_data |> 
+    filter(
+      yr == "2021" &
+        rep == "rep1" &
+        day != "D1"
+    )
+)
+```
+
+
+## PLOT
+
+```{r}
+
+# PLOT
+
+# write a breaks func
+breaks_fun <- function(x) {
+  if (max(x) > 10) {
+    seq(1, max(x), 1)
+  } else {
+    seq(1, max(x), 1)
+  }
+}
+
+beads_p2a <- summ_mod |>
+# summ_mod |>
+  rename(
+    col_set = colonyGroup,
+    trial = rep
+  ) |> 
+  filter(
+    yr == "2021"
+  ) |> 
+  ggplot(
+    aes(
+      x = doe,
+      y = mean,
+      group = trial
+    )
+  ) +
+  geom_line(
+    linewidth = 1.6,
+    # color = "grey30"
+    aes(
+      col = col_set
+      # lty = col_set
+    )
+  ) +
+  geom_errorbar(
+    aes(
+      # ymin = mean - ci,
+      ymin = mean - sd,
+      # ymax = mean + ci
+      ymax = mean + sd
+    ),
+    width = 0,
+    linewidth = .5
+  ) +
+  geom_point(
+    # shape = 21,
+    stroke = 1.5,
+    fill = "grey70",
+    # alpha = 0.85,
+    aes(
+      shape = bead_color
+    ),
+    size = 4
+  ) +
+  # geom_area(
+  #   aes(
+  #     ymin = mean - ci,
+  #     ymax = mean + ci
+  #   )
+  # ) +
+  facet_grid(col_set ~ yr, scales = "free") +
+  scale_y_continuous(
+    limits = c(-0.2, 1),
+    # breaks = c(0, 0.2, 0.5, 0.8, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    # labels = c("", "0.2", "0.5", "0.8", "")
+    labels = c("0", "", "0.5", "", "1")
+  ) +
+  scale_x_continuous(
+    breaks =  breaks_fun,
+    limits = c(1, NA)
+  ) +
+  # scale_x_date(
+  #   date_breaks = "4 day",
+  #   date_minor_breaks = "2 day",
+  #   date_labels = "%d"
+  # ) +
+  theme_Publication(25) +
+  scale_fill_manual(
+    values = age_colors,
+    "Day of experiment"
+  ) +
+  scale_color_manual(
+    values = c(
+      "grey60",
+      "grey60",
+      # "blue",
+      "black"
+    ),
+    name = NULL,
+    labels = NULL,
+    guide = NULL
+  ) +
+  scale_shape_manual(
+    values = c(21, 23, 24),
+    name = "Bead color"
+  ) +
+  scale_linetype_manual(
+    values = c("solid", "dashed")
+  ) +
+  labs(
+    x = "Day",
+    y = "Proportion of\nbeads removed",
+    title = "2021"
+  ) +
+  theme(
+    legend.position = "none",
+    # strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(colour = "black")
+  )
+
+beads_p2b <- summ_mod |>
+# summ_mod |>
+  rename(
+    col_set = colonyGroup,
+    trial = rep
+  ) |> 
+  filter(
+    yr == "2022"
+  ) |> 
+  mutate(
+    doe = if_else(
+      trial == "rep8",
+      glue::glue("{doe} ({day})") |> as.character(),
+      doe |> as.character()
+    )
+  ) |> 
+  ggplot(
+    aes(
+      x = as.factor(doe),
+      y = mean,
+      group = trial
+    )
+  ) +
+  geom_line(
+    linewidth = 1.6,
+    # color = "grey30"
+    aes(
+      col = col_set
+    )
+  ) +
+  geom_errorbar(
+    aes(
+      # ymin = mean - ci,
+      ymin = mean - sd,
+      # ymax = mean + ci
+      ymax = mean + sd
+    ),
+    width = 0,
+    linewidth = .5
+  ) +
+  geom_point(
+    # shape = 21,
+    stroke = 1.5,
+    fill = "grey70",
+    # alpha = 0.85,
+    aes(
+      shape = bead_color
+    ),
+    size = 4
+  ) +
+  # geom_area(
+  #   aes(
+  #     ymin = mean - ci,
+  #     ymax = mean + ci
+  #   )
+  # ) +
+  facet_grid(yr ~ trial, scales = "free") +
+  scale_y_continuous(
+    limits = c(0, 1),
+    # breaks = c(0, 0.2, 0.5, 0.8, 1),
+    breaks = c(0, 0.25, 0.5, 0.75, 1),
+    # labels = c("", "0.2", "0.5", "0.8", "")
+    labels = c("0", "", "0.5", "", "1")
+  ) +
+  # scale_x_continuous(
+  #   breaks =  breaks_fun,
+  #   limits = c(1, NA)
+  # ) +
+  # scale_x_date(
+  #   date_breaks = "4 day",
+  #   date_minor_breaks = "2 day",
+  #   date_labels = "%d"
+  # ) +
+  theme_Publication(25) +
+  scale_fill_manual(
+    values = age_colors,
+    "Day of experiment"
+  ) +
+  scale_color_manual(
+    values = c(
+      "grey60",
+      "grey60",
+      "black"
+    ),
+    name = NULL,
+    labels = NULL,
+    guide = NULL
+  ) +
+  scale_shape_manual(
+    values = c(21, 23, 24),
+    name = "Bead color"
+  ) +
+  labs(
+    x = "Day",
+    y = "Proportion of\nbeads removed",
+    title = "2022"
+  ) +
+  theme(
+    legend.position = "none",
+    # strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    strip.text.y = element_blank(),
+    panel.border = element_rect(colour = "black")
+  )
+```
+
+
+```{r, fig.width=8, fig.height=14}
+(
+  beads_p1 / beads_p2a / beads_p2b
+) + plot_annotation(
+  tag_levels = 'A'
+) + theme(
+  plot.tag.position = c(0, 1)
+)
+```
+
+
+# FORAGING
+
+
+## Foraging data 2021
+
+```{r get_foraging_data}
+## Load the foraging data for 2021 dataset
+filename3 <- paste0(
+  path_to_repo,
+  "/data/foraging_data.csv"
+)
+
+tidy.for.2021 <-
+ read.csv(filename3) %>% 
+  as_tibble() %>%
+  mutate(
+    date = as.Date(date, format="%m/%d/%y"),
+    colonyID = as.character(colonyID),
+    foraging_30s = foraging_30s / 2
+  ) %>%
+  # doing something, notice
+  group_by(colonyID) %>% 
+  mutate(
+    max_foraging_30s = max(foraging_30s, na.rm = T),
+    prop_foraging_30s = round(foraging_30s/max_foraging_30s, 2)
+  ) |> 
+  ungroup() |> 
+  # take max foraging data when duplicates exist
+  group_by(colonyID, date) |> 
+  arrange(
+    desc(prop_foraging_30s)
+  ) |> 
+  slice(1) |> 
+  ungroup() |> 
+  glimpse()
+```
+
+
+## Foraging data 2022
+
+```{r foraging_2022}
+# set path to your working directory (change, if necessary)
+# path_to_repo2 = "/Users/biplabendudas/Documents/05_postdoc/Deborah_Gordon/04_research/2022/01_field_season_2022/04_field_work/02_rprojects/01_checking_data"
+path_to_repo2 = paste0(
+  path_to_repo,
+  "/../01_field_season_2022/04_field_work/02_rprojects/01_checking_data"
+)
+
+# set path to the behavioral data within your repository 
+path_to_data2 = "/01_data/"
+
+## Specify the name of the master file as saved on your computer
+filename2 <- "arizona_2022_master_list_Aug29_1440h.csv"
+
+column.names <- c("date",
+                  "was_it_raining",
+                  "observer",
+                  "colonyID",
+                  "first_obs",
+                  "second_obs",
+                  "time",
+                  "in_1",
+                  "out_1",
+                  "in_2",
+                  "out_2",
+                  "in_3",
+                  "out_3",
+                  "in_4",
+                  "out_4",
+                  "in_5",
+                  "out_5",
+                  "in_6",
+                  "out_6",
+                  "in_7",
+                  "out_7",
+                  "in_8",
+                  "out_8"
+)
+
+tidy.for.2022 <-
+  read.table(
+    paste0(path_to_repo2, path_to_data2, filename2),
+    sep = ",",
+    header = T,
+    na.strings = c(""," "),
+    stringsAsFactors = F,
+    skip = 1
+  ) %>% 
+  as_tibble() %>% 
+  mutate(date = lubridate::mdy(date)) %>% 
+  select(1:length(column.names)) |> 
+  setNames(column.names) |> 
+  # remove columns containing first and second obs
+  select(-first_obs, -second_obs, -was_it_raining) |> 
+  group_by(date, observer, colonyID, time) %>% 
+  mutate(
+    tot_in = rowSums(
+      across(matches("^in_")),
+      na.rm = TRUE
+    ),
+    tot_out = rowSums(
+      across(matches("^out_")),
+      na.rm = TRUE
+    )
+  ) %>% 
+  ungroup() |>
+  mutate(
+    foraging_30s = (tot_in + tot_out) / 2
+  ) %>% 
+  select(
+    date,
+    colonyID,
+    foraging_30s
+  ) |> 
+  group_by(colonyID) %>% 
+  mutate(
+    max_foraging_30s = max(foraging_30s, na.rm = T),
+    prop_foraging_30s = round(foraging_30s/max_foraging_30s, 2)
+  ) |> 
+  ungroup() |> 
+  # take max foraging data when duplicates exist
+  group_by(colonyID, date) |> 
+  arrange(
+    desc(prop_foraging_30s)
+  ) |> 
+  slice(1) |> 
+  ungroup() |> 
+  glimpse()
+
+# ## add prop_foraging data
+# tidy.for.2022 <-
+#   for.dat %>% 
+#   select(date, 
+#          colonyID,
+#          foraging_30s) %>% 
+#   distinct() %>% 
+#   mutate(date = as.Date(date, format="%m/%d/%y")) %>%
+#   mutate(colonyID = as.factor(colonyID)) %>% 
+#   # doing something, notice
+#   group_by(colonyID) %>% 
+#   summarise(max_foraging_30s = max(foraging_30s, na.rm = T)) %>% 
+#   ungroup() %>% 
+#   right_join(for.dat, by="colonyID") %>% 
+#   mutate(prop_foraging_30s = foraging_30s/max_foraging_30s) %>% 
+#   mutate_if(is.numeric, round, 2) %>% 
+#   mutate(date = as.Date(date))
+# 
+# 
+# for.tidydat.2022 <-
+#   tidydat.2022.sub %>% 
+#   mutate(colonyID = as.factor(colonyID)) %>%
+#   mutate(obs_day = parse_number(as.character(counted_when))) %>%
+#   mutate(date = as.Date(date) + (obs_day - 1)) %>% 
+#     
+#   left_join(tidy.for.2022, by=c("colonyID", "date")) %>% 
+#   select(colonyID:bead_color, obs_day, max_foraging_30s, foraging_30s, prop_foraging_30s) %>% 
+#   
+#   # mutate(colonyID = as.double(colonyID)) %>%
+#   right_join(tidydat.2022.sub, by=c("colonyID", "date", "bead_color")) %>% 
+#   
+#   group_by(colonyID,bead_color) %>%  
+#   # mutate(foraging_30s = foraging_30s[1]) %>% 
+#   # mutate(prop_foraging_30s = prop_foraging_30s[1]) %>% 
+#   mutate(obs_day = paste0("D",obs_day[1])) %>% 
+#   ungroup() %>% 
+#   
+#   # mutate(s_cum_prop = round(cum_prop/foraging_30s, 2)) %>%
+#   # mutate(s2_cum_prop = round(cum_prop/prop_foraging_30s, 2)) %>%
+#   
+#   # na.omit() %>% 
+#   # filter(s_cum_prop <= 1) %>%
+#   
+#   select(colonyID:bead_color,
+#          age_obs,age_class, 
+#          beads_collected,
+#          max_foraging_30s,
+#          foraging_30s,
+#          prop_foraging_30s,
+#          counted_when, cum_prop)
+```
+
+## Combine the 2021 and 2022 foraging data
+
+```{r}
+for.tidydat <- bind_rows(tidy.for.2021, tidy.for.2022) |> 
+  glimpse()
+```
+
+
+# Combine foraging and bead data (Day 1 only)
+
+```{r combine_for_data}
+# for.tidydat.2021 %>% summary() # 9 rows have missing foraging data | out of 46 rows
+# for.tidydat.2022 %>% summary() # 12 rows have missing data | out of 156 rows
+
+s.bead_data <-
+  bead_data |> 
+    filter(
+      day == "D1"
+    ) |> 
+  left_join(
+    for.tidydat,
+    join_by(
+      date,
+      colonyID
+    )
+  ) |> 
+  glimpse()
+
+```
+
+## Export combined data
+
+```{r}
+# s.bead_data |> 
+#   rowwise() |>
+#   mutate(
+#     bead_color = stringr::str_split(bead_color, "-")[[1]][2]
+#   ) |>
+#   ungroup() |>
+#   mutate(
+#     new_name = factor(
+#       new_name,
+#       levels = paste0(
+#         "C-",
+#         bead_data$new_name |>
+#           unique() |>
+#           stringr::str_replace("C-", "") |>
+#           as.integer() |>
+#           sort()
+#       )
+#     ),
+#     cum_prop = round(cum_prop, 3),
+#     across(
+#       matches("foraging"),
+#       ~ if_else(
+#         is.na(.x),
+#         "missing",
+#         as.character(.x)
+#       )
+#     )
+#   ) |>
+#   arrange(yr, new_name, rep) |> 
+#   # view()
+#   write.csv(
+#     "results/raw_data/foraging_bead_data_day1.csv",
+#     row.names = FALSE
+#   )
+```
+
+
+# SUMMARY OF COLONIES USED (BEADS)
+
+```{r}
+bead_data |> 
+  group_by(
+    rep,
+    colonyID
+  ) |> 
+  slice(1) |> 
+  ungroup() |> 
+  mutate(
+    across(
+      c(colonyID, new_name),
+      ~ as.character(.x) |> 
+        stringr::str_replace(
+          "C-",
+          ""
+        ) |> 
+        as.integer()
+    )
+  ) |> 
+  glimpse() |> 
+  group_by(bead_color, colonyGroup, date) |> 
+  reframe(
+    n = n(),
+    colonyID = paste(sort(new_name), collapse = ", ")
+    # old_names = paste(sort(colonyID), collapse = ", ")
+  ) |> 
+  # view()
+  # write.csv(
+  #   here::here(
+  #     "./manuscript/resubmission/00_figures_tables/01_supp_colonies_used_summary.csv"
+  #   ),
+  #   row.names = FALSE
+  # )
+  DT::datatable()
+
+```
+
+## Save compiled data
+
+```{r save_compiled_data_v1}
+saveRDS(
+  s.bead_data, 
+  file = paste0(
+    path_to_repo,
+    "/data/compiled_data_s_bead_data_mod_2021_2022"
+  )
+)
+```
+
+
+### What does each column mean?
+
+The columns in the above dataset has the following meaning.
+
+- *yr*: which year?
+    - year in which the replicate was performed; n=2; 2021 and 2022
+- *date*: date of experiment
+    - either the first date of the experimental replicate is shown
+    - or exact dates are shown
+- *rep*: which replicate?
+    - unique replicates were performed; n=6; rep1 through rep6
+    - color of the bead that was used; n=3; green/pink/blue
+    - year in which the replicate was performed; n=2; 2021(21) and 2022
+
+- *colonyID*: which colony?
+    - unique identifiers (name) of the colony used
+    - n = 36 unique colonies across the two years
+    - 13 in 2021 and 19 in 2022; 6 colonies in both
+
+- *beads_collected*: number of beads collected
+    - usually 50 are oil-coated beads are presented
+- *counted_when*: which day-time for counting number of returned beads
+    - Day 1 or 2 (D1 or D2)
+    - before noon (bN), around 11 am
+    - Morning (M), around 8 AM
+- *cum_prop*: proportion of beads returned on Day 1 or 2 (D1 or D2)
+    - proportion was calculated as (# beads returned)/(# beads collected)
+    - Day 1 observation of beads returned was performed before noon (bN), around 11 am
+    - Day 2 observations were performed either in the morning (M), around 8 AM, or before noon
+
+- *age_obs*: age of the colony at observation
+    - units: years
+- *age_class*: age-class of the colony
+    - age class that a colony belongs to (n=3)
+    - classified as 1-2yr v. 3-4yr v. 5+ year old
+
+- *max_foraging_30s*: maximum foraging rate observed for a colony
+    - units: ants per 30 seconds
+    - maximum rate observed for the colony across all observation days in a year
+    - seasonal, in our case yearly, measure
+- *foraging_30s*: foraging rate observed for a colony on the given day
+    - units: ants per 30 seconds
+    - rate observed during the morning activity period on the day of the experiment
+    - daily measure
+
+
+# Year to Year Difference
+
+
+### Variation across years (D1 only)
+
+```{r fig_v4, fig.width=9, fig.height=5}
+# fig10a <-
+#   dat.d1 %>%
+#   ggplot(aes(x=yr, y=cum_prop1)) +
+#   geom_boxplot(size=1, alpha=0.5, aes(fill=yr)) +
+#   geom_jitter(size=4, alpha=0.35, width = 0.1) +
+#   theme_Publication(25) +
+#   theme(axis.title.x = element_blank(),
+#         legend.position = "none") +
+#   scale_y_continuous(n.breaks = 3) +
+#   scale_fill_manual(values = yr_colors) +
+#   labs(x="year",
+#        y="proportion of beads",
+#        title = "Day 1")
+
+foo <- s.bead_data |> 
+  filter(
+    !is.na(foraging_30s)
+  )
+
+foo |> 
+  select(
+    yr,
+    cum_prop,
+    foraging_30s
+  ) |> 
+  tidyr::pivot_longer(
+    !yr,
+    names_to = "what",
+    values_to = "value"
+  ) |> 
+  mutate(
+    what = if_else(
+      what == "cum_prop",
+      "Proportion of beads",
+      "Foraging activity"
+    ) |> 
+      factor(
+        levels = c(
+          "Proportion of beads",
+          "Foraging activity"
+        )
+      )
+  ) |> 
+  ggplot(
+    aes(
+      x = yr,
+      y = value
+    )
+  ) +
+  geom_boxplot(
+    size = 1, alpha = 0.85, fill = "grey", color = "black",
+    outlier.color = NA
+  ) +
+  geom_jitter(
+    size = 4, alpha = 0.35, width = 0.15
+  ) +
+  facet_wrap(~ what, scales = "free_y") +
+  theme_Publication(25) +
+  theme(
+    axis.title.x = element_blank(),
+    title = element_blank(),
+    legend.position = "none"
+  ) +
+  scale_y_continuous(n.breaks = 4) +
+  labs(
+    y = ""
+  )
+
+```
+
+
+# Variation in abiotic conditions
+
+```{r abiotic_plot_v1, fig.width=9, fig.height=4}
+clim.dat <- read.csv(
+  paste0(
+    path_to_repo,
+    "/data/all_climate_data_beadexp_2021_2022.csv"
+  )
+)
+
+writeLines("How many unique dates, in each year, are we 
+           using to calculate mean and 95% CI?")
+
+clim.dat %>%
+  select(1) %>%
+  distinct() %>%
+  mutate(date = as.character(date)) %>%
+  group_by(date) %>%
+  mutate(yr = str_split_fixed(date, n=2, pattern = "-")[[1]][1]) %>%
+  mutate(day = str_split_fixed(date, n=3, pattern = "-")[[3]][1]) %>%
+  ungroup() %>%
+  group_by(yr) %>%
+  summarise(n.days = length(unique(day)),
+            which.month = "August",
+            which.days = paste(unique(day), collapse = ", "))
+
+clim.dat_summ <-
+  clim.dat %>%
+    as_tibble() %>%
+  select(date, time, temp_F, rH, precip=precip_accum_inch) %>%
+  distinct() %>%
+  mutate(temp_C=(temp_F-32)*(5/9)) %>%
+  group_by(date) %>%
+  mutate(yr = str_split(date, "-")[[1]][1]) %>%
+  ungroup() %>%
+  mutate(yr = as.factor(yr)) %>%
+  pivot_longer(cols = temp_F:temp_C,
+               names_to = "what",
+               values_to = "value") %>%
+
+  # ggplot(aes(x=what, y=value, fill=yr)) +
+  # scale_color_manual(values = yr_colors) +
+  # scale_fill_manual(values = yr_colors) +
+  # geom_boxplot(width=.4, position = position_dodge(width = .60)) +
+  # theme_Publication(20) +
+  # theme(legend.position = "none",
+  #       axis.title.x = element_blank(),
+  #       axis.title.y = element_blank())
+
+  filter(what != "temp_F") %>%
+
+  group_by(yr, what) %>%
+  summarize(mean.val = round(mean(value, na.rm = T),2),
+            sd.val = round(sd(value, na.rm = T),2),
+            n.val = n()) %>%
+  mutate(se.val = round(sd.val/sqrt(n.val), 2),
+         ci95 = round(qt(1 - (0.05/2), n.val - 1)*se.val, 2)) %>%
+  ungroup()
+
+clim.dat_summ |> 
+  arrange(what, yr) |> 
+  DT::datatable()
+
+clim.dat_summ %>%
+    ggplot(aes(x=yr, y=mean.val, col=yr)) +
+    geom_errorbar(
+      aes(ymin=mean.val-ci95, ymax=mean.val+ci95), 
+      width=0.4, 
+      size=2, 
+      col="black"
+    ) +
+    geom_point(size=4, position = position_dodge(width = 2), col = "red") +
+    facet_wrap(~as.factor(what), scales = "free_y") +
+    theme_Publication(base_size = 22) +
+    scale_color_manual(values = yr_colors) +
+    scale_fill_manual(values = yr_colors) +
+    # scale_shape_manual(values = c(17,17,16, 16,16,16)) +
+    # coord_flip() +
+    theme(legend.position = "none",
+          axis.title.x = element_blank()) +
+    labs(x="",
+         y="",
+         subtitle = "precip inch; humidity %rH; temperature ºC")
+# )
+
+```
+
+## Kruskal Wallis Tests
+
+```{r}
+purrr::map(
+  c("temp_F", "rH", "precip_accum_inch"),
+  function(x) {
+    foo <- clim.dat |>
+      mutate(
+        yr = lubridate::ymd(date) |> lubridate::year()
+      )
+    kruskal.test(foo[[x]] ~ foo$yr) |> print()
+  }
+) |> 
+  setNames(
+    c("temp_F", "rH", "precip_accum_inch")
+  )
+
+```
+
+
+# AGE
+
+```{r, fig.width=9, fig.height=5}
+bead_data |> 
+  filter(
+    yr == "2022"
+  ) |> 
+  ggplot(
+    aes(x = age_class, y = cum_prop, fill = age_class)
+  ) +
+  facet_grid(~ day) +
+  geom_boxplot() +
+  geom_jitter(
+    size = 3,
+    width = 0.1,
+    alpha = 0.3
+  ) +
+  scale_y_continuous(
+    n.breaks = 3
+  ) +
+  labs(
+    x = "Age class",
+    y = "Proportion of beads\n(cumulative)"
+  ) +
+  scale_fill_manual(values = viridis::viridis(5)[c(2,4,5)]) +
+  theme_Publication(20) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom"
+  )
+  
+
+```
+
+## Kruskal Wallis Test 
+
+Comparing the medians across different age groups
+
+```{r}
+bead_data |> 
+  filter(yr == "2022") |> 
+  group_by(day) |> 
+  reframe(
+    statistic = kruskal.test(cum_prop ~ age_class)$statistic,
+    p_value = kruskal.test(cum_prop ~ age_class)$p.value,
+    df = kruskal.test(cum_prop ~ age_class)$parameter
+  ) |> 
+  mutate_if(
+    is.numeric,
+    ~ round(.x, 3)
+  ) |> 
+  print()
+```
+
+
+# 1. Rate of rubbish removal
+
+```{r}
+bead_data |> 
+  group_by(yr, day) |> 
+  reframe(
+    n = n(),
+    mean_value = mean(cum_prop, na.rm = TRUE),
+    median_value = median(cum_prop, na.rm = TRUE),
+    se = sd(cum_prop, na.rm = TRUE) / sqrt(n),
+    lower_ci = t.test(cum_prop)$conf.int[1],
+    upper_ci = t.test(cum_prop)$conf.int[2]
+  ) |> 
+  kableExtra::kable()
+```
+
+# 3. Relation between bead returns and foraging
+
+## Prep data
+
+```{r}
+dat.mod <- foo |>
+  mutate(
+    beads_returned = round(
+      prop*beads_collected, 
+      0
+    )
+  ) |> 
+  group_by(
+    colonyID,
+    yr
+  ) |> 
+  mutate(
+    n_reps_yr = n()
+  ) |> 
+  ungroup() |> 
+  filter(
+    n_reps_yr > 1
+  )
+
+```
+
+
+## Evaluate models
+
+```{r, include=FALSE}
+
+# GLMM --------------------------------------------------------------------
+mm0 <- lme4::glmer(
+  cbind(
+    beads_returned,
+    beads_collected - beads_returned
+  ) ~ (1|colonyID/rep),
+  # data = dat.mod, 
+  data = dat.mod |> 
+    mutate(
+      yr = factor(
+        yr,
+        levels = c("2021", "2022")
+      )
+    ),
+  family = binomial(link = "logit")
+)
+
+mm1 <- lme4::glmer(
+  cbind(
+    beads_returned,
+    beads_collected - beads_returned
+  ) ~ (1|colonyID/rep) +
+    yr +
+    prop_foraging_30s +
+    yr:prop_foraging_30s,
+  # data = dat.mod, 
+  data = dat.mod |> 
+    mutate(
+      yr = factor(
+        yr,
+        levels = c("2021", "2022")
+      )
+    ),
+  family = binomial(link = "logit")
+)
+
+anova(mm1, mm0)
+```
+
+## Fixed effects
+
+```{r}
+# Re-check importance of random effects
+writeLines("Proposed MODEL (m1):")
+summary(mm1)[["call"]] |> 
+  print()
+
+writeLines("Interaction term")
+mm2 <- update(
+  mm1,
+  . ~ . - yr:prop_foraging_30s
+)
+anova(mm2, mm1)
+
+writeLines("Normalized foraging")
+mm3 <- update(
+  mm2,
+  . ~ . - prop_foraging_30s
+)
+anova(mm3, mm2)
+
+```
+
+
+## Random effects
+
+```{r}
+writeLines("Random: Colony ID")
+mm3a <- update(
+  mm3,
+  . ~ . - (1|colonyID/rep) + (1|rep)
+)
+anova(mm3a, mm3)
+
+writeLines("Random: Replicate")
+mm3b <- update(
+  mm3,
+  . ~ . - (1|colonyID/rep) + (1|colonyID)
+)
+anova(mm3b, mm3)
+
+```
+
+
+## Explore best model
+
+```{r, fig.width=6, fig.height=5}
+## Specify model ----
+glmm <- mm3
+
+## QC model ----
+plot(glmm)
+
+## Export summary table ----
+summary(glmm) |> 
+  print()
+
+# summary(glmm) |> 
+#   purrr::pluck(coefficients) |> 
+#   as.data.frame() |> 
+#   tibble::rownames_to_column(
+#     var = "Variable"
+#   ) |> 
+#   as_tibble() |> 
+#   janitor::clean_names() |> 
+#   mutate_if(is.numeric, ~ round(.x, 4)) |> 
+#   DT::datatable()
+  # write.csv(
+  #   "./results/tables/02_resubmission_model_summary.csv",
+  #   row.names = FALSE
+  # )
+
+```
+
+## Backtransformed from logit scale 
+
+Summary Table with odds-ratio instead of log-odds
+
+```{r}
+# Tidy the model output
+tidy_summary <- broom.mixed::tidy(
+# broom.mixed::tidy(
+  glmm,
+  effects = "fixed",
+  conf.int = TRUE,
+  exponentiate = TRUE
+) |> 
+  mutate(
+    across(
+      is.numeric,
+    ~ round(.x, 3)
+    )
+  ) |> 
+  select(
+    term,
+    estimate,
+    matches("^conf."),
+    statistic,
+    p.value
+  )
+
+# # Print the results
+# print(tidy_summary)
+
+# Print the summary table
+tidy_summary |> 
+  mutate(
+    across(
+      estimate:statistic,
+      ~ round(.x, 2)
+    )
+  ) |> 
+  DT::datatable()
+```
+
+
+# Conclusion
+
+Overall, these findings highlight the importance of foraging behavior in the likelihood of waste removal, and suggests that year to year differences in abiotic conditions (effects of year) can modulate the relation between normalized foraging rate (proportion of maximum possible) and the likelihood of waste removal in harvester ant colonies.
+
+> RANDOM EFFECTS: The likelihood of bead returns also varies significantly across days of experiment (replicate) and across colonies (colonyID).
+
+
+<!-- ```{r, fig.width=7, fig.height=4} -->
+
+<!-- ## plot predictions ---- -->
+<!-- ### bead returns ~ prop foraging ---- -->
+<!-- range_foraging <- dat.mod |>  -->
+<!--   pull(prop_foraging_30s) |>  -->
+<!--   # pull(foraging_30s) |>  -->
+<!--   range() -->
+
+<!-- # seq_foraging <- seq( -->
+<!-- #   # range_foraging[1], range_foraging[2], 10 -->
+<!-- #   range_foraging[1], range_foraging[2], 10 -->
+<!-- # ) -->
+
+<!-- seq_foraging <- c(0, 0.25, 0.5, 0.75, 1) -->
+
+<!-- pred.glmm <- emmeans::emmeans( -->
+<!--   glmm, -->
+<!--   c("yr", "prop_foraging_30s"), -->
+<!--   # c("yr", "foraging_30s"), -->
+<!--   at = list( -->
+<!--     # foraging_30s = seq_foraging -->
+<!--     prop_foraging_30s = seq_foraging -->
+<!--   ), -->
+<!--   # at = list(prop_foraging_30s = c(0, 0.25, 0.5, .75, 1)), -->
+<!--   type = "response" -->
+<!-- ) |>  -->
+<!--   broom.mixed::tidy() |>  -->
+<!--   janitor::clean_names() |>  -->
+<!--   # filter( -->
+<!--   #  p_value < 0.05  -->
+<!--   # ) |>  -->
+<!--   rename( -->
+<!--     prop_beads_returned = prob -->
+<!--   ) -->
+
+<!-- p1 <- foo |>  -->
+<!--   rename( -->
+<!--     prop_beads_returned = prop -->
+<!--   ) |>  -->
+<!--   ggplot( -->
+<!--     aes( -->
+<!--       # x = foraging_30s, -->
+<!--       x = prop_foraging_30s, -->
+<!--       # x = log2(age_obs), -->
+<!--       # x = yr, -->
+<!--       y = prop_beads_returned -->
+<!--       # y = qlogis(prop_beads_returned) # logit scale -->
+<!--     ) -->
+<!--   ) + -->
+<!--   geom_point( -->
+<!--     shape = 21, -->
+<!--     color = "black", -->
+<!--     fill = "black", -->
+<!--     # aes( -->
+<!--     #   fill = yr -->
+<!--     # ), -->
+<!--     size = 3, -->
+<!--     alpha = 0.7 -->
+<!--   ) + -->
+<!--   # scale_x_continuous( -->
+<!--   #   breaks = c(0, .5, 1), -->
+<!--   #   labels = c(0, 0.5, 1) -->
+<!--   # ) + -->
+<!--   # scale_y_continuous( -->
+<!--   #   breaks = c(0, .5, 1), -->
+<!--   #   labels = c(0, 0.5, 1) -->
+<!--   # ) + -->
+<!--   # scale_color_manual( -->
+<!--   #   values = c("grey20", "orange") -->
+<!--   # ) + -->
+<!--   # scale_fill_manual( -->
+<!--   #   values = c("grey20", "orange") -->
+<!--   # ) + -->
+<!--   theme_bw(24) + -->
+<!--   theme( -->
+<!--     legend.position = "bottom" -->
+<!--   ) -->
+
+<!-- p2a <- p1 + -->
+<!--   geom_ribbon( -->
+<!--     aes( -->
+<!--       ymin = prop_beads_returned - std_error*qnorm(0.975), -->
+<!--       ymax = prop_beads_returned + std_error*qnorm(0.975) -->
+<!--     ), -->
+<!--     fill = "grey", -->
+<!--     alpha = 0.35, -->
+<!--     data = pred.glmm -->
+<!--   ) + -->
+<!--   geom_line( -->
+<!--     data = pred.glmm, -->
+<!--     col = "black", -->
+<!--     # aes(col = yr), -->
+<!--     size = 2 -->
+<!--   ) + -->
+<!--   labs( -->
+<!--     y = "Proportion of\nbeads removed", -->
+<!--     x = "Normalized foraging rate" -->
+<!--   ) + -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(0, .50, 1) -->
+<!--   ) + -->
+<!--   scale_y_continuous( -->
+<!--     breaks = c(0, .50, 1) -->
+<!--   ) + -->
+<!--   # labs( -->
+<!--   #   title = "Predicted relation", -->
+<!--   #   subtitle = "(95% Confidence Interval)" -->
+<!--   # ) -->
+<!--   # labs( -->
+<!--   #   y = "Proportion beads returned", -->
+<!--   #   x = "Proportion foraging" -->
+<!--   # ) + -->
+<!--   facet_grid( ~ yr) -->
+
+<!-- print(p2a) -->
+<!-- # #### Save plot ---- -->
+<!-- # bd.saveplot( -->
+<!-- #   name = "pred_glmm_foraging", -->
+<!-- #   width = 20, -->
+<!-- #   height = 14, -->
+<!-- #   # the plot -->
+<!-- #   plot = p2a -->
+<!-- # ) -->
+<!-- ``` -->
+

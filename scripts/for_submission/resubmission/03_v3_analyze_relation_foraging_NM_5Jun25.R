@@ -79,7 +79,7 @@ foraging_colors <- c("#9CD5A2", "#F29544")
 # Load data ---------------------------------------------------------------
 
 dat <- readRDS(
-# readRDS(
+  # readRDS(
   paste0(
     path_to_repo,
     "/results/raw_data/",
@@ -87,9 +87,9 @@ dat <- readRDS(
   )
 ) |> 
   ## FILTER: keep data for Day 1 only ----
-  filter(
-    counted_when == "D1_bN"
-  ) 
+filter(
+  counted_when == "D1_bN"
+) 
 
 # colony.name.register <- readRDS(
 #   paste0(
@@ -125,8 +125,8 @@ for.beads <- dat %>%
     max_foraging_30s,
     beads_collected,
     prop_beads_returned = cum_prop
- ) 
-  
+  ) 
+
 
 # TO DO: COME BACK HERE -------------------------------------------------
 # Check if the following is necessary.
@@ -287,101 +287,103 @@ mm_null <- lme4::glmer(
   cbind(
     beads_returned,
     beads_collected - beads_returned
-  ) ~ 1 + 
-    (1|rep),
+  ) ~ (1|colonyID/rep),
   data = dat.mod, 
   family = binomial(link = "logit")
 )
 
-# # ColonyID as a random effect (INDIVIDUAL)
-# 
-# mm0 <- update(
-#   mm_null,
-#   . ~ . +
-#     (1|colonyID)
+# mm_null1 <- lme4::glmer(
+#   cbind(
+#     beads_returned,
+#     beads_collected - beads_returned
+#   ) ~ (1|colonyID) + (1|rep),
+#   data = dat.mod, 
+#   family = binomial(link = "logit")
 # )
 # anova(
 #   mm_null,
-#   mm0
+#   mm_null1
 # )
+
+# ## Raw foraging 
+#
+# mm_rawforaging <- lme4::glmer(
+#   cbind(
+#     beads_returned,
+#     beads_collected - beads_returned
+#   ) ~ 1 + 
+#     yr + foraging_30s + yr:foraging_30s +
+#     (1|colonyID/rep),
+#   data = dat.mod, 
+#   family = binomial(link = "logit")
+# )
+# anova(
+#   mm_rawforaging,
+#   mm_null
+# )
+# summary(mm_rawforaging)
+
 
 # ColonyID as a random effect (NESTED)
 
-mm0 <- update(
-  mm_null,
-  . ~ . +
-    (1|colonyID/rep)
+mm0 <- mm_null
+
+## Full model ----
+mm1 <- update(
+  mm0,
+  . ~ . + 
+    yr:prop_foraging + yr + prop_foraging
 )
 anova(
-  mm_null,
+  mm1,
   mm0
 )
+summary(mm1)   
 
-
-## Age class ----
-# Can't talk about it since all 2021 colonies are from only
-# one age class.
-
-## Raw foraging counts ----
-mm0a <- update(
-  mm0,
-  . ~ . + 
-    foraging_30s
-)
-anova(mm0a, mm0)
-
-## Prop foraging ----
-mm0b <- update(
-  mm0,
-  . ~ . +
-    prop_foraging
-)
-anova(mm0b, mm0)
-# (individual): 4.8365  1    0.02786 *
-# (nested):     
-
-## Interaction: yr, prop foraging ----
-mm1 <- update(
-  mm0b,
-  . ~ . + 
-    yr:prop_foraging
-)
-anova(
-  mm1,
-  mm0b
-)
-# individual: 7.7304  1    0.00543 **
-# nested:     
-
-## yr ----
+## interaction term ----
 mm2 <- update(
   mm1,
-  . ~ . + yr
+  . ~ . - yr:prop_foraging
+  # . ~ . - yr:foraging_30s
 )
 anova(
-  mm1, mm2
+  mm2,
+  mm1
+  # mm0
 )
-# individual: 12.199  1  0.0004782 ***
-# nested:     
+summary(mm2)
+# interaction term is not significant
 
-
-## Colony effects
-
-## colonyID: slope (yr) ----
+## prop_foraging -------
 mm3 <- update(
-  mm2, 
-  . ~ . - 
-    (1|colonyID) +
-    (yr|colonyID)
+  mm2,
+  . ~ . - prop_foraging
 )
 anova(
-  mm2, mm3
+  mm3,
+  mm2
+)
+summary(mm3)
+# prop_foraging is not a significant predictor
+
+## colonyID
+mm3a <- update(
+  mm3,
+  . ~ . - (1|colonyID/rep) + (1|rep)
+)
+anova(
+  mm3,
+  mm3a
 )
 
-## replicates: intercept ----
-mm3a <- update(mm2, . ~ . - (1|rep))
+## replicate
+mm3b <- update(
+  mm3,
+  . ~ . - (1|colonyID/rep) + (1|colonyID)
+)
 anova(
-  mm3, mm3a
+  mm3,
+  mm3b
 )
 
 # the odds of bead returns vary from replicate to replicate (chisq = 10, df = 1, p = 0.001).
@@ -389,6 +391,7 @@ anova(
 
 ## Specify model ----
 glmm <- mm3
+summary(glmm)
 
 
 ## QC model ----
@@ -402,18 +405,18 @@ summary(glmm) |>
     var = "Variable"
   ) |> 
   as_tibble() |> 
-  janitor::clean_names() |> 
-  write.csv(
-    "./results/tables/02_resubmission_model_summary.csv",
-    row.names = FALSE
-  )
+  janitor::clean_names() 
+  # write.csv(
+  #   "./results/tables/02_resubmission_model_summary.csv",
+  #   row.names = FALSE
+  # )
 
 ## plot predictions ----
 ### bead returns ~ prop foraging ----
 pred.glmm <- emmeans::emmeans(
   glmm,
-  c("yr", "prop_foraging"),
-  at = list(prop_foraging = c(0, 0.25, 0.5, .75, 1)),
+  c("yr"),
+  # at = list(prop_foraging = c(0, 0.25, 0.5, .75, 1)),
   type = "response"
 ) |> 
   broom.mixed::tidy() |> 
@@ -724,7 +727,7 @@ dat.both <- rbind(
   )
 
 p3 <- dat.both |>
-# dat.both |>
+  # dat.both |>
   mutate(
     txt_color = if_else(
       prop < 0.5,
